@@ -34,6 +34,39 @@ const THEME_PRESETS = {
 const getThemePreset = (themeKey) =>
   THEME_PRESETS[themeKey] ?? THEME_PRESETS.classic;
 
+const FRAME_LAYOUT_PRESETS = {
+  studioClassic: {
+    label: "Studio Classic",
+    topPanel: 90,
+    bottomPanel: 80,
+    gap: 18,
+    framePadding: 14,
+    innerPadding: 10,
+    overlaySrc: null,
+  },
+  ticketNight: {
+    label: "Ticket Night",
+    topPanel: 96,
+    bottomPanel: 90,
+    gap: 16,
+    framePadding: 16,
+    innerPadding: 8,
+    overlaySrc: "/frames/ticket-night.svg",
+  },
+  confettiBloom: {
+    label: "Confetti Bloom",
+    topPanel: 92,
+    bottomPanel: 86,
+    gap: 20,
+    framePadding: 18,
+    innerPadding: 10,
+    overlaySrc: "/frames/confetti-bloom.svg",
+  },
+};
+
+const getFrameLayoutPreset = (layoutKey) =>
+  FRAME_LAYOUT_PRESETS[layoutKey] ?? FRAME_LAYOUT_PRESETS.studioClassic;
+
 const withAlpha = (hex, alpha) => {
   const normalized = hex.replace("#", "");
   if (normalized.length !== 6) return `rgba(15, 23, 42, ${alpha})`;
@@ -71,6 +104,16 @@ const loadImage = (src) =>
     image.onerror = () => reject(new Error("Failed to load captured image."));
     image.src = src;
   });
+
+const loadOptionalImage = async (src) => {
+  if (!src) return null;
+
+  try {
+    return await loadImage(src);
+  } catch {
+    return null;
+  }
+};
 
 const canvasToBlob = (canvas, type = "image/png", quality) =>
   new Promise((resolve, reject) => {
@@ -121,17 +164,18 @@ const drawImageCover = (
   );
 };
 
-const buildPhotoStrip = async ({ shots, boothLabel, themeKey }) => {
+const buildPhotoStrip = async ({ shots, boothLabel, themeKey, layoutKey }) => {
   const theme = getThemePreset(themeKey);
+  const layout = getFrameLayoutPreset(layoutKey);
 
   const stripWidth = 720;
   const margin = 30;
-  const gap = 18;
-  const topPanel = 90;
-  const bottomPanel = 80;
+  const gap = layout.gap;
+  const topPanel = layout.topPanel;
+  const bottomPanel = layout.bottomPanel;
   const photoHeight = 420;
-  const photoFramePadding = 14;
-  const photoInnerPadding = 10;
+  const photoFramePadding = layout.framePadding;
+  const photoInnerPadding = layout.innerPadding;
   const photoX = margin + 20;
   const photoWidth = stripWidth - (margin + 20) * 2;
   const stripHeight =
@@ -201,6 +245,11 @@ const buildPhotoStrip = async ({ shots, boothLabel, themeKey }) => {
     cursorY += photoHeight + gap;
   }
 
+  const overlayImage = await loadOptionalImage(layout.overlaySrc);
+  if (overlayImage) {
+    ctx.drawImage(overlayImage, 0, 0, stripWidth, stripHeight);
+  }
+
   ctx.fillStyle = theme.accent;
   ctx.font = "600 22px 'Segoe UI', sans-serif";
   ctx.fillText(stampedDate, stripWidth / 2, stripHeight - margin - 20);
@@ -212,6 +261,13 @@ const THEME_OPTIONS = Object.entries(THEME_PRESETS).map(([key, value]) => ({
   label: value.label,
   value: key,
 }));
+
+const FRAME_LAYOUT_OPTIONS = Object.entries(FRAME_LAYOUT_PRESETS).map(
+  ([key, value]) => ({
+    label: value.label,
+    value: key,
+  }),
+);
 
 const Photobooth = () => {
   const videoRef = useRef(null);
@@ -228,12 +284,18 @@ const Photobooth = () => {
     shotCount: 4,
     countdownSeconds: 3,
     themeKey: "classic",
+    layoutKey: "studioClassic",
     boothLabel: "Snap Booth",
   });
 
   const activeTheme = useMemo(
     () => getThemePreset(settings.themeKey),
     [settings.themeKey],
+  );
+
+  const activeLayout = useMemo(
+    () => getFrameLayoutPreset(settings.layoutKey),
+    [settings.layoutKey],
   );
 
   const progressText = useMemo(() => {
@@ -391,6 +453,7 @@ const Photobooth = () => {
       shots,
       boothLabel: settings.boothLabel.trim() || "Snap Booth",
       themeKey: settings.themeKey,
+      layoutKey: settings.layoutKey,
     });
 
   const downloadStrip = async () => {
@@ -546,7 +609,7 @@ const Photobooth = () => {
             </span>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
             <div
               className="w-full rounded-2xl border p-3"
               style={{
@@ -637,6 +700,30 @@ const Photobooth = () => {
                   }))
                 }
                 options={THEME_OPTIONS}
+                showPlaceholderOption={false}
+                wrapperClassName="w-full"
+                labelClassName="mb-1 block text-sm font-medium text-gray-700"
+              />
+            </div>
+
+            <div
+              className="rounded-2xl border p-3"
+              style={{
+                backgroundColor: withAlpha(activeTheme.frameInner, 0.9),
+                borderColor: withAlpha(activeTheme.accent, 0.2),
+              }}
+            >
+              <SelectInput
+                label="Frame layout"
+                name="frameLayout"
+                value={settings.layoutKey}
+                onChange={(event) =>
+                  setSettings((prev) => ({
+                    ...prev,
+                    layoutKey: event.target.value,
+                  }))
+                }
+                options={FRAME_LAYOUT_OPTIONS}
                 showPlaceholderOption={false}
                 wrapperClassName="w-full"
                 labelClassName="mb-1 block text-sm font-medium text-gray-700"
@@ -762,6 +849,12 @@ const Photobooth = () => {
               style={{ color: activeTheme.accent }}
             >
               Theme applied: {activeTheme.label}
+            </div>
+            <div
+              className="mb-3 text-xs font-semibold"
+              style={{ color: activeTheme.accent }}
+            >
+              Frame layout: {activeLayout.label}
             </div>
 
             {!shots.length && (
